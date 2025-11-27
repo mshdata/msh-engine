@@ -1,0 +1,75 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dbt-bridge"
+version = "0.1.15"
+description = "A dbt-native Reverse ETL tool powered by dlt to move data between databases and APIs."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    { name = "Januka Peiris", email = "jaypeiris91@gmail.com" },
+]
+keywords = ["dbt", "dlt", "etl", "reverse-etl", "data-engineering", "duckdb"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+dependencies = [
+    "dbt-core>=1.5.0",
+    "dbt-duckdb>=1.5.0",
+    "dlt[parquet]>=0.4.0",
+    "pandas",
+    "sqlalchemy>=1.4.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/jay-peiris/dbt-bridge"
+Repository = "https://github.com/jay-peiris/dbt-bridge"
+Issues = "https://github.com/jay-peiris/dbt-bridge/issues"
+
+[project.optional-dependencies]
+# Standard Databases
+postgres = ["dlt[postgres]", "psycopg2-binary"]
+snowflake = ["dlt[snowflake]", "snowflake-sqlalchemy"]
+redshift = ["dlt[redshift]", "psycopg2-binary"]
+bigquery = ["dlt[bigquery]", "db-dtypes"]
+duckdb = ["dlt[duckdb]"]
+athena = ["dlt[athena]"]
+databricks = ["dlt[databricks]"]
+
+# Microsoft Stack
+mssql = ["dlt[mssql]", "pyodbc"]
+synapse = ["dlt[synapse]", "pyodbc"] # Dedicated Synapse extra
+fabric = ["dlt[mssql]", "pyodbc"]     # Fabric SQL Endpoint uses MSSQL protocol
+
+# Storage & Lakes
+trino = ["dlt[trino]"]
+s3 = ["dlt[s3]"]         # AWS S3
+gcs = ["dlt[gs]"]        # Google Cloud Storage
+azure = ["dlt[az]"]      # Azure Blob/ADLS
+filesystem = ["dlt[filesystem]"] # Local files
+
+# "Install Everything" Bundle
+all = [
+    "dlt[postgres]", "psycopg2-binary",
+    "dlt[snowflake]",
+    "dlt[redshift]",
+    "dlt[bigquery]",
+    "dlt[duckdb]",
+    "dlt[athena]",
+    "dlt[databricks]",
+    "dlt[mssql]", "pyodbc",
+    "dlt[synapse]",
+    "dlt[trino]",
+    "dlt[s3]", "dlt[gs]", "dlt[az]"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

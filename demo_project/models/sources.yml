@@ -1,0 +1,16 @@
+version: 2
+
+sources:
+  - name: postgres_prod
+    description: "Production Postgres Database"
+    tables:
+      - name: users
+        description: "User data from production Postgres database"
+      - name: orders
+        description: "Orders data for incremental testing"
+
+  - name: external_api
+    description: "External REST API"
+    tables:
+      - name: users
+        description: "Users endpoint from JSONPlaceholder"

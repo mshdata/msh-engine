@@ -1,0 +1,6 @@
+demo_profile:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: 'demo.duckdb'

@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: dbt_bridge_postgres
+    environment:
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: source_db
+    ports:
+      - "5432:5432"
+    volumes:
+      # Mount the setup script to auto-run on startup
+      - ./setup_postgres.sql:/docker-entrypoint-initdb.d/init.sql
