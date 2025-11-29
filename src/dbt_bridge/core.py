@@ -147,3 +147,100 @@ def transfer(
     }
     
     return pd.DataFrame(receipt_data)
+
+def generic_transfer(dbt) -> pd.DataFrame:
+    """
+    A generic dbt Python model that reads configuration from the MSH_JOB_CONFIG
+    environment variable and executes a dlt pipeline using the transfer() function.
+    
+    The MSH_JOB_CONFIG should be a JSON string with the following structure:
+    {
+        "source": {
+            "module": "path.to.module", # e.g., "dlt.sources.helpers.rest_client" or "my_sources"
+            "name": "source_func_name", # e.g., "stripe_source"
+            "args": { ... },            # Arguments for the source function
+            "resource": "resource_name" # Optional: specific resource to select
+        },
+        "destination": { ... },         # Optional: override destination config
+        "dataset_name": "...",
+        "table_name": "...",
+        "write_disposition": "...",
+        "primary_key": ...
+    }
+    """
+    import json
+    import os
+    import importlib
+    
+    config_str = os.environ.get("MSH_JOB_CONFIG")
+    if not config_str:
+        raise ValueError("MSH_JOB_CONFIG environment variable is not set.")
+        
+    try:
+        config = json.loads(config_str)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON in MSH_JOB_CONFIG: {e}")
+        
+    # Extract config
+    source_config = config.get("source", {})
+    dataset_name = config.get("dataset_name")
+    table_name = config.get("table_name")
+    write_disposition = config.get("write_disposition", "replace")
+    primary_key = config.get("primary_key")
+    
+    if not dataset_name or not table_name:
+        raise ValueError("dataset_name and table_name are required in MSH_JOB_CONFIG")
+
+    # Dynamic Source Loading
+    module_name = source_config.get("module")
+    func_name = source_config.get("name")
+    source_args = source_config.get("args", {})
+    resource_name = source_config.get("resource")
+    
+    if not module_name or not func_name:
+        # Fallback for simple "source: stripe" style if we want to support it, 
+        # but for now let's require explicit module/name or handle the CLI side to resolve it.
+        # If the CLI resolves "stripe" to "dlt.sources.stripe", that's better.
+        # For now, we'll assume the config is fully resolved.
+        raise ValueError("source.module and source.name are required in MSH_JOB_CONFIG")
+        
+    try:
+        mod = importlib.import_module(module_name)
+        source_func = getattr(mod, func_name)
+    except (ImportError, AttributeError) as e:
+        raise ValueError(f"Could not import source function {func_name} from {module_name}: {e}")
+        
+    # Instantiate source
+    source = source_func(**source_args)
+    
+    # Select resource if specified
+    if resource_name:
+        if hasattr(source, "with_resources"):
+             source = source.with_resources(resource_name)
+        else:
+            # If it's not a dlt source (e.g. generator), we can't select resources easily 
+            # unless we wrap it. But dlt sources should have this.
+            pass
+
+    # Determine destination
+    # In dbt context, we usually want to write to the same warehouse dbt is using.
+    # But dlt needs a destination. 
+    # If not provided, we might default to 'duckdb' for local or 'snowflake' etc.
+    # Ideally, we pass the dbt connection info to dlt? 
+    # Or we just let dlt handle it via secrets/config.
+    # For this implementation, we'll assume dlt is configured via secrets.toml or env vars
+    # or passed in config.
+    target_destination = config.get("destination", "duckdb") # Default to duckdb for safety? Or maybe 'dummy'?
+    # Actually, dbt-bridge transfer() takes target_destination.
+    
+    return transfer(
+        dbt=dbt,
+        source_data=source,
+        target_destination=target_destination,
+        dataset_name=dataset_name,
+        table_name=table_name,
+        write_disposition=write_disposition,
+        primary_key=primary_key,
+        dbt_source_ref=(dataset_name, table_name) # Register lineage
+    )
+
