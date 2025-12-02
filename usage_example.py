@@ -1,4 +1,4 @@
-import dbt_bridge
+import msh_engine
 from dlt.sources.sql_database import sql_database
 
 def model(dbt, session):
@@ -40,7 +40,7 @@ def model(dbt, session):
     # 3. Perform the Transfer
     # This will read from Postgres and write to Snowflake
     # It also registers a lineage link from the dbt source "postgres_source.users"
-    receipt_df = dbt_bridge.transfer(
+    return msh_engine.transfer(
         dbt=dbt,
         source_data=source,
         target_destination=destination,

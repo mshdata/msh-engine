@@ -4,7 +4,7 @@ import pandas as pd
 from unittest.mock import MagicMock
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
-import dbt_bridge
+import msh_engine
 import dlt
 
 # Dummy source function
@@ -51,9 +51,23 @@ def test_generic_transfer():
     
     os.environ["DESTINATION__DUCKDB__CREDENTIALS"] = f"duckdb:///{db_file}"
 
+    from unittest.mock import patch
+    
     print("--- Running generic_transfer test ---")
     try:
-        receipt = dbt_bridge.generic_transfer(dbt)
+        import importlib
+        original_import = importlib.import_module
+        
+        def import_side_effect(name, *args, **kwargs):
+            if name == "__main__":
+                mock_mod = MagicMock()
+                mock_mod.dummy_source = dummy_source
+                return mock_mod
+            return original_import(name, *args, **kwargs)
+
+        with patch('importlib.import_module', side_effect=import_side_effect):
+            receipt = msh_engine.generic_transfer(dbt)
+        
         print("Receipt:")
         print(receipt)
         

@@ -1,4 +1,4 @@
-import dbt_bridge
+import msh_engine
 import pandas as pd
 import dlt
 from dlt.sources.helpers.rest_client import RESTClient
@@ -14,14 +14,14 @@ def model(dbt, session):
     data = [{'id': 1, 'name': 'Test User 1'}, {'id': 2, 'name': 'Test User 2'}]
     
     # 2. Transform
-    df = dbt_bridge.api_to_df(data)
+    df = msh_engine.api_to_df(data)
     
     # 3. Load: Write to a separate DuckDB table/file
     # This simulates an "External Destination"
     destination = dlt.destinations.duckdb("external_destination.duckdb")
 
     # Perform the transfer
-    receipt_df = dbt_bridge.transfer(
+    receipt_df = msh_engine.transfer(
         dbt=dbt,
         source_data=df,
         target_destination=destination,

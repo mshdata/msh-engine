@@ -3,12 +3,12 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dbt-bridge"
-version = "0.1.15"
-description = "A dbt-native Reverse ETL tool powered by dlt to move data between databases and APIs."
+name = "msh-engine"
+version = "0.1.0"
+description = "The runtime engine for the msh atomic data platform."
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = {text = "Business Source License 1.1 (BSL 1.1)"}
 authors = [
     { name = "Januka Peiris", email = "jaypeiris91@gmail.com" },
 ]
@@ -16,7 +16,7 @@ keywords = ["dbt", "dlt", "etl", "reverse-etl", "data-engineering", "duckdb"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: Other/Proprietary License",
     "Programming Language :: Python :: 3",
     "Topic :: Database",
     "Topic :: Software Development :: Libraries :: Python Modules"
@@ -26,6 +26,8 @@ dependencies = [
     "dbt-duckdb>=1.5.0",
     "dlt[parquet]>=0.4.0",
     "pandas",
+    "requests",
+    "pyarrow",
     "sqlalchemy>=1.4.0"
 ]
 

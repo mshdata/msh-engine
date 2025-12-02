@@ -1,4 +1,4 @@
-import dbt_bridge
+import msh_engine
 import dlt
 
 def model(dbt, session):
@@ -18,7 +18,7 @@ def model(dbt, session):
 
     # 3. Push to Snowflake
     # This creates the table 'FINAL_USERS_REPORT' in the 'ANALYTICS_PROD' dataset in Snowflake
-    return dbt_bridge.transfer(
+    return msh_engine.transfer(
         dbt=dbt,
         source_data=final_df,
         target_destination=destination,

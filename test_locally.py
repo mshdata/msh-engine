@@ -1,4 +1,4 @@
-import dbt_bridge
+import msh_engine
 import pandas as pd
 import dlt
 from unittest.mock import MagicMock
@@ -30,13 +30,13 @@ def test_local_transfer():
 
     # 3. Test api_to_df
     print("\n--- Testing api_to_df ---")
-    df = dbt_bridge.api_to_df(data)
+    df = msh_engine.api_to_df(data)
     print("Converted to DataFrame:")
     print(df)
     
     # 4. Run Transfer
     print("\n--- Testing transfer ---")
-    receipt = dbt_bridge.transfer(
+    receipt = msh_engine.transfer(
         dbt=dbt,
         source_data=df, # Passing DF as source
         target_destination=destination,

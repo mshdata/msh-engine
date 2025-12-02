@@ -1,4 +1,4 @@
-import dbt_bridge
+import msh_engine
 import dlt
 
 def model(dbt, session):
@@ -16,7 +16,7 @@ def model(dbt, session):
     destination = dlt.destinations.snowflake()
 
     # 3. Push to Snowflake
-    return dbt_bridge.transfer(
+    return msh_engine.transfer(
         dbt=dbt,
         source_data=customers_df,
         target_destination=destination,

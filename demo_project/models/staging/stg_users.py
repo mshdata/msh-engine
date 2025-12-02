@@ -1,4 +1,4 @@
-import dbt_bridge
+import msh_engine
 from dlt.sources.helpers.rest_client import RESTClient
 
 def model(dbt, session):
@@ -12,13 +12,12 @@ def model(dbt, session):
     users_generator = client.paginate("/users")
 
     # 2. Transform: Convert to DataFrame
-    # Flatten the pages (list of lists) into a single list of dicts
     # This ensures api_to_df receives a flat list of records
     all_data = []
     for page in users_generator:
         all_data.extend(page)
         
-    df = dbt_bridge.api_to_df(all_data)
+    df = msh_engine.api_to_df(users_generator)
     
     # This model simply lands the data in our local DuckDB
     return df

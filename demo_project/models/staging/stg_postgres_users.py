@@ -1,4 +1,4 @@
-import dbt_bridge
+import msh_engine
 import pandas as pd
 from dlt.sources.sql_database import sql_database
 
@@ -17,7 +17,7 @@ def model(dbt, session):
 
     # 2. Transform: Convert to DataFrame
     # This brings the data into our local execution environment (DuckDB/Pandas)
-    df = dbt_bridge.api_to_df(source)
+    df = msh_engine.api_to_df(source)
     
     # We return the DataFrame, which dbt-duckdb saves as a local table 'stg_postgres_users'
     return df

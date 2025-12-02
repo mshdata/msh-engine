@@ -1,4 +1,4 @@
-import dbt_bridge
+import msh_engine
 import pandas as pd
 import dlt
 from dlt.sources.helpers.rest_client import RESTClient
@@ -19,7 +19,7 @@ def model(dbt, session):
 
     # 2. Transform: Convert to Pandas and filter in memory
     # Use dbt-bridge helper to get DataFrame
-    df = dbt_bridge.api_to_df(users_generator)
+    df = msh_engine.api_to_df(users_generator)
     
     # Apply business logic
     # Example: Keep only users with ID > 5
@@ -40,7 +40,7 @@ def model(dbt, session):
 
     # Perform the transfer
     # Registers lineage to a ghost node "api_source.users"
-    receipt_df = dbt_bridge.transfer(
+    return msh_engine.transfer(
         dbt=dbt,
         source_data=clean_df,
         target_destination=destination,

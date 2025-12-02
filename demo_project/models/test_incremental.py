@@ -1,4 +1,4 @@
-import dbt_bridge
+import msh_engine
 import dlt
 from dlt.sources.sql_database import sql_database
 
@@ -20,7 +20,7 @@ def model(dbt, session):
     # Load to Snowflake with MERGE (incremental upsert)
     destination = dlt.destinations.snowflake()
     
-    return dbt_bridge.transfer(
+    return msh_engine.transfer(
         dbt=dbt,
         source_data=source,
         target_destination=destination,

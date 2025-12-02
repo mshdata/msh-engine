@@ -3,6 +3,7 @@ import pandas as pd
 import time
 from datetime import datetime
 from typing import Any, Optional, Tuple, Union, List, Iterator
+from .logger import logger
 
 def api_to_df(source: Any) -> pd.DataFrame:
     """
@@ -72,10 +73,10 @@ def transfer(
             # This registers the node in the dbt DAG
             dbt.source(source_name, source_table)
         except Exception as e:
-            print(f"Warning: Failed to register dbt source reference: {e}")
+            logger.warning(f"Failed to register dbt source reference: {e}")
 
     start_time = time.time()
-    job_id = f"dbt_bridge_{int(start_time)}"
+    job_id = f"msh_engine_{int(start_time)}"
     status = "success"
     rows_loaded = 0
     error_message = None
@@ -86,7 +87,7 @@ def transfer(
         # or a generic name. dlt handles state management.
         # State is stored in the destination to support ephemeral environments.
         pipeline = dlt.pipeline(
-            pipeline_name=f"dbt_bridge_{dataset_name}_{table_name}",
+            pipeline_name=f"msh_engine_{dataset_name}_{table_name}",
             destination=target_destination,
             dataset_name=dataset_name,
         )
@@ -111,27 +112,58 @@ def transfer(
             )
         
         # Extract metrics from load_info
-        # Note: load_info.load_packages is a list of LoadPackageInfo
-        # We can sum up the metrics.
-        for package in load_info.load_packages:
-            for job in package.jobs['completed_jobs']:
-                 # This is a simplification; actual row counts might need more detailed parsing
-                 # depending on the source and how dlt reports it. 
-                 # For now, we assume success implies we processed the source.
-                 pass
-        
-        # dlt doesn't always return exact row counts in the summary easily without parsing,
-        # but we can try to get some info or just mark success.
-        # For a better "rows_loaded", we might need to inspect the source or the load info deeply.
-        # Let's try to get it from the load info if available, otherwise 0 or -1.
-        # Actually, let's just log the load_info as a string for debug if needed.
-        
-        print(load_info)
+        # dlt LoadInfo provides row counts through load_packages
+        try:
+            # Try to get row count from load_info.load_packages
+            for package in load_info.load_packages:
+                # Check for table metrics in the package
+                if hasattr(package, 'schema_update') and package.schema_update:
+                    # Schema update contains table information
+                    for table_name, table_info in package.schema_update.items():
+                        if hasattr(table_info, 'row_count'):
+                            rows_loaded += table_info.row_count
+                        elif isinstance(table_info, dict) and 'row_count' in table_info:
+                            rows_loaded += table_info['row_count']
+                
+                # Also check jobs for row counts
+                if hasattr(package, 'jobs') and package.jobs:
+                    completed_jobs = package.jobs.get('completed_jobs', [])
+                    for job in completed_jobs:
+                        # Some dlt versions report row counts in job metrics
+                        if hasattr(job, 'file_info') and job.file_info:
+                            if hasattr(job.file_info, 'file_size'):
+                                # Estimate rows from file size (rough approximation)
+                                # This is a fallback if exact counts aren't available
+                                pass
+                        # Check for row_count attribute
+                        if hasattr(job, 'row_count'):
+                            rows_loaded += job.row_count
+                        elif isinstance(job, dict) and 'row_count' in job:
+                            rows_loaded += job['row_count']
+            
+            # Alternative: Try load_info.load_metrics if available (newer dlt versions)
+            if hasattr(load_info, 'load_metrics') and load_info.load_metrics:
+                if hasattr(load_info.load_metrics, 'rows_count'):
+                    rows_loaded = load_info.load_metrics.rows_count
+                elif isinstance(load_info.load_metrics, dict) and 'rows_count' in load_info.load_metrics:
+                    rows_loaded = load_info.load_metrics['rows_count']
+            
+            # If still zero, try to get from pipeline stats
+            if rows_loaded == 0 and hasattr(pipeline, 'last_trace'):
+                trace = pipeline.last_trace
+                if trace and hasattr(trace, 'normalize_info'):
+                    normalize_info = trace.normalize_info
+                    if normalize_info and hasattr(normalize_info, 'rows'):
+                        rows_loaded = normalize_info.rows
+        except (AttributeError, TypeError, KeyError) as e:
+            # If extraction fails, log warning but don't fail the operation
+            logger.warning(f"Could not extract exact row count from load_info: {e}")
+            # rows_loaded remains 0, which indicates "unknown" rather than "zero rows"
 
     except Exception as e:
         status = "failed"
         error_message = str(e)
-        print(f"Error during dlt pipeline run: {e}")
+        logger.error(f"Error during dlt pipeline run: {e}")
 
     end_time = time.time()
     duration = end_time - start_time

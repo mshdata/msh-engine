@@ -1,4 +1,4 @@
-import dbt_bridge
+import msh_engine
 import pandas as pd
 import dlt
 from dlt.sources.helpers.rest_client import RESTClient
@@ -14,7 +14,7 @@ def model(dbt, session):
     users_generator = client.paginate("/users")
 
     # 2. Transform: Convert to DataFrame
-    df = dbt_bridge.api_to_df(users_generator)
+    df = msh_engine.api_to_df(users_generator)
     
     # Enrich data (e.g., add a timestamp)
     df['ingested_at'] = pd.Timestamp.now()
@@ -29,7 +29,7 @@ def model(dbt, session):
     destination = dlt.destinations.snowflake()
 
     # 4. Transfer
-    return dbt_bridge.transfer(
+    receipt_df = msh_engine.transfer(
         dbt=dbt,
         source_data=df_filtered,
         target_destination=destination,
