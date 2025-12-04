@@ -49,10 +49,11 @@ def _verify_connection(source_config: Dict[str, Any], source_type: str) -> Tuple
                 return False, "No URL found"
                 
             # Simple HEAD/GET check
+            CONNECTION_TIMEOUT = 5  # seconds
             try:
-                response = requests.head(url, timeout=5)
+                response = requests.head(url, timeout=CONNECTION_TIMEOUT)
                 if response.status_code == 405:
-                    response = requests.get(url, stream=True, timeout=5)
+                    response = requests.get(url, stream=True, timeout=CONNECTION_TIMEOUT)
                     response.close()
             except requests.RequestException as e:
                  return False, f"Connection failed: {e}"
@@ -66,16 +67,20 @@ def _verify_connection(source_config: Dict[str, Any], source_type: str) -> Tuple
             credentials = source_config.get("credentials")
             import sqlalchemy
             engine = sqlalchemy.create_engine(credentials)
-            with engine.connect() as conn:
-                pass
-            return True, "Database connection successful"
+            try:
+                with engine.connect() as conn:
+                    pass
+                return True, "Database connection successful"
+            finally:
+                engine.dispose()  # Ensure engine is properly disposed
             
         elif source_type == "graphql":
             url = source_config.get("endpoint")
+            CONNECTION_TIMEOUT = 5  # seconds
             try:
-                response = requests.head(url, timeout=5)
+                response = requests.head(url, timeout=CONNECTION_TIMEOUT)
                 if response.status_code == 405:
-                    response = requests.get(url, stream=True, timeout=5)
+                    response = requests.get(url, stream=True, timeout=CONNECTION_TIMEOUT)
                     response.close()
                 if response.status_code < 400:
                     return True, f"Connected to {url}"
@@ -90,6 +95,8 @@ def _verify_connection(source_config: Dict[str, Any], source_type: str) -> Tuple
 
 from .sources.rest_api import RestApiSource
 from .sources.sql_database import SqlDatabaseSource
+from .metadata import MetadataExtractor
+from .validation import GlossaryValidator
 
 def generic_loader(dbt: Any) -> pd.DataFrame:
     """
@@ -270,13 +277,41 @@ def generic_loader(dbt: Any) -> pd.DataFrame:
         dataset_name=config.get("dataset_name", "msh_raw")
     )
     
-    info = pipeline.run(
-        source_data,
-        table_name=target_table,
-        write_disposition=write_disposition,
-        primary_key=primary_key,
-        loader_file_format="parquet" 
-    )
+    try:
+        info = pipeline.run(
+            source_data,
+            table_name=target_table,
+            write_disposition=write_disposition,
+            primary_key=primary_key,
+            loader_file_format="parquet" 
+        )
+    except Exception as e:
+        # Provide helpful error messages for Snowflake errors
+        # Note: Only applies when destination is Snowflake - other destinations get standard error handling
+        error_msg = str(e).lower()
+        if target_destination.lower() == "snowflake":
+            if "warehouse" in error_msg and "suspended" in error_msg:
+                raise RuntimeError(
+                    "Snowflake warehouse is suspended. Resume it in the Snowflake UI. "
+                    f"Original error: {e}"
+                ) from e
+            elif "timeout" in error_msg or "connection" in error_msg:
+                raise RuntimeError(
+                    "Snowflake connection timeout. Check network connectivity and warehouse status. "
+                    f"Original error: {e}"
+                ) from e
+            elif "quota" in error_msg or "limit" in error_msg:
+                raise RuntimeError(
+                    "Snowflake quota exceeded. Check your account limits. "
+                    f"Original error: {e}"
+                ) from e
+            elif "authentication" in error_msg or "login" in error_msg:
+                raise RuntimeError(
+                    "Snowflake authentication failed. Check your credentials. "
+                    f"Original error: {e}"
+                ) from e
+        # Re-raise other errors as-is
+        raise
     
     # Task 2: Fix Metadata Writing (The Bug)
     try:
@@ -347,6 +382,58 @@ def generic_loader(dbt: Any) -> pd.DataFrame:
             "source_type": source_type,
             "timestamp": str(pd.Timestamp.now())
         }
+        
+        # Extract schema metadata for AI context
+        try:
+            project_root = os.path.dirname(meta_dir) if meta_dir.endswith("run_meta") else os.path.dirname(os.path.dirname(meta_dir))
+            metadata_extractor = MetadataExtractor(project_root=project_root)
+            schema_metadata = metadata_extractor.extract_schema_from_load_info(info, target_table)
+            sidecar["schema"] = schema_metadata
+            
+            # Save runtime metadata
+            asset_name = target_table.replace("raw_", "").replace("_raw", "")
+            metadata_extractor.save_runtime_metadata(asset_name, {
+                "schema": schema_metadata,
+                "rows_loaded": rows_loaded,
+                "source_type": source_type
+            })
+        except Exception as e:
+            logger.warning(f"Failed to extract schema metadata: {e}")
+        
+        # Apply glossary validation
+        try:
+            project_root = os.path.dirname(meta_dir) if meta_dir.endswith("run_meta") else os.path.dirname(os.path.dirname(meta_dir))
+            glossary_validator = GlossaryValidator(project_root=project_root)
+            asset_name = target_table.replace("raw_", "").replace("_raw", "")
+            
+            # Get column names
+            column_names = []
+            if columns:
+                column_names = columns
+            elif "schema" in sidecar:
+                schema_cols = sidecar["schema"].get("columns", [])
+                column_names = [col.get("name") if isinstance(col, dict) else col for col in schema_cols]
+            
+            # Check if asset is public (from config)
+            is_public = config.get("deploy", {}).get("public", False)
+            
+            if column_names:
+                policy_results = glossary_validator.apply_glossary_policies(
+                    asset_name,
+                    column_names,
+                    is_public
+                )
+                
+                if policy_results["should_block"]:
+                    logger.error(f"Glossary policy violations: {policy_results['pii_violations']}")
+                    raise ValueError(f"Asset blocked due to glossary policy violations: {policy_results['pii_violations']}")
+                
+                if policy_results["warnings"]:
+                    logger.warning(f"Glossary constraint warnings: {policy_results['warnings']}")
+                
+                sidecar["glossary_validation"] = policy_results
+        except Exception as e:
+            logger.warning(f"Failed to apply glossary validation: {e}")
         
         meta_file = os.path.join(meta_dir, f"{target_table}.json")
         logger.debug(f"Writing metadata to {meta_file}")

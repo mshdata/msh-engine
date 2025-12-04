@@ -11,6 +11,7 @@ from .sql_utils import (
     execute_safe_query, execute_ddl_safe, SQLSecurityError
 )
 from .logger import logger
+from .metadata import MetadataExtractor
 
 def get_active_hash(conn: Connection, asset_name: str, target_schema: str = "main") -> Optional[str]:
     """
@@ -227,10 +228,34 @@ class StateManager:
     def save_deployment_state(self, state_dict: Dict[str, Any]) -> None:
         """
         Persists deployment state to msh_state_history table using dlt.
+        Also updates versions.json cache for AI context.
         """
         pipeline = self._get_pipeline()
         try:
             pipeline.run([state_dict], table_name="msh_state_history", write_disposition="append")
+            
+            # Update versions.json cache
+            try:
+                import os
+                project_root = os.getcwd()
+                if project_root.endswith("build"):
+                    project_root = os.path.dirname(project_root)
+                
+                metadata_extractor = MetadataExtractor(project_root=project_root)
+                asset_name = state_dict.get("asset_name", "")
+                deployment_hash = state_dict.get("hash", "")
+                blue_schema = state_dict.get("blue_schema")
+                green_schema = state_dict.get("green_schema")
+                
+                deployment_metadata = metadata_extractor.get_deployment_metadata(
+                    asset_name,
+                    deployment_hash,
+                    blue_schema,
+                    green_schema
+                )
+                metadata_extractor.update_versions_cache(asset_name, deployment_metadata)
+            except Exception as e:
+                logger.warning(f"Failed to update versions cache: {e}")
         except Exception as e:
             logger.warning(f"Failed to save remote state: {e}")
 
